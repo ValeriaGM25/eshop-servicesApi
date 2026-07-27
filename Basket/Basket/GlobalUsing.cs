@@ -1,0 +1,10 @@
+﻿global using Basket.Data;
+global using Basket.Models;
+global using BuildingBlocks.Behaviors;
+global using BuildingBlocks.CQRS;
+global using BuildingBlocks.Exceptions.Handler;
+global using Carter;
+global using FluentValidation;
+global using Marten;
+global using MediatR;
+global using StackExchange.Redis;
