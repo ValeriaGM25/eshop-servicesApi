@@ -1,8 +1,4 @@
-﻿using Carter;
-using Marten;
-using MediatR;
-
-namespace Catalog.API.Models.Products.CreateProduct
+﻿namespace Catalog.API.Models.Products.CreateProduct
 {
     public record CreateProductRequest(string Name, string Description,
         List<string> Category, string ImageFiles, decimal Price);
@@ -13,19 +9,22 @@ namespace Catalog.API.Models.Products.CreateProduct
     {
         public void AddRoutes(IEndpointRouteBuilder app)
         {
-            app.MapPost("/products", async (CreateProductRequest request, ISender sender) =>
+            app.MapPost("/products", async (
+                CreateProductRequest request,
+                ISender sender,
+                CancellationToken cancellationToken) =>
             {
                 var command = request.Adapt<CreateProductCommand>();
 
-                var result = await sender.Send(command);
+                var result = await sender.Send(command, cancellationToken);
                 var response = result.Adapt<CreateProductResponse>();
                 return Results.Created($"/products/{response.Id}", response);
             })
-                .WithName("CrearProducto")
+                .WithName("CreateProduct")
                 .Produces<CreateProductResponse>(StatusCodes.Status201Created)
                 .ProducesProblem(StatusCodes.Status400BadRequest)
-                .WithSummary("Crear un nuevo producto")
-                .WithDescription("Crear a nuevo producto y se retorna el identificador de la entidad");
+                .WithSummary("Create product")
+                .WithDescription("Creates a product and returns its identifier.");
         }
     }
 }

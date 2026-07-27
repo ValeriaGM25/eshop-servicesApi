@@ -1,11 +1,11 @@
 ﻿namespace Catalog.API.Models.Products.GetProductByCategory
 {
-    record GetProductByCategoryQuery(string Category)
+    public record GetProductByCategoryQuery(string Category)
         :IQuery<GetProductByCategoryResult>;
 
-    record GetProductByCategoryResult(IEnumerable<Product> Products);
+    public record GetProductByCategoryResult(IEnumerable<Product> Products);
 
-    internal class GetProductByCategoryHandler(
+    public class GetProductByCategoryHandler(
         IDocumentSession session, ILogger<GetProductByCategoryHandler>
         logger) : IQueryHandler<GetProductByCategoryQuery,
             GetProductByCategoryResult>
@@ -18,6 +18,7 @@
                 query);
             var products = await session.Query<Product>()
                 .Where(p => p.Category.Contains(query.Category))
+                .OrderBy(product => product.Name)
                 .ToListAsync(cancellationToken);
             return new GetProductByCategoryResult(products);
         }

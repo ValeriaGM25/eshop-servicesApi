@@ -1,17 +1,12 @@
-﻿using Marten;
-using System.Windows.Input;
-
-namespace Catalog.API.Models.Products.CreateProduct
+﻿namespace Catalog.API.Models.Products.CreateProduct
 {
-    /*record nos permite crear el producto con los datos para registrar coo uno nuevo*/
     public record CreateProductCommand(string Name, string Description,
         List<string> Category, string ImageFiles, decimal Price)
         : ICommand<CreateProductResult>;
 
-    /*este record retorna el objeto de respuesta es decir el identificador del objeto insertar*/
     public record CreateProductResult(Guid Id);
 
-    internal class CreateProductCommandHandler(IDocumentSession documentSession):
+    public class CreateProductCommandHandler(IDocumentSession documentSession):
         ICommandHandler<CreateProductCommand,
             CreateProductResult>
     {
@@ -20,6 +15,7 @@ namespace Catalog.API.Models.Products.CreateProduct
         {
             Product product = new Product
             {
+                Id = Guid.NewGuid(),
                 Name = request.Name,
                 Description = request.Description,
                 Category = request.Category,

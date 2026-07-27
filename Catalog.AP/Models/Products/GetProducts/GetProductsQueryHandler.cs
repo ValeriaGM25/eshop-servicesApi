@@ -1,20 +1,15 @@
-﻿using Catalog.API.Common.Caching;
-using Catalog.API.Common.Pagination;
+﻿using Catalog.API.Common.Pagination;
 
 namespace Catalog.API.Models.Products.GetProducts
 {
     public record GetProductsQuery(
         int PageNumber = 1,
         int PageSize = 10)
-        : IQuery<GetProductsResult>, ICacheableQuery
-    {
-        public string CacheKey => $"products-page-{PageNumber}-size-{PageSize}";
-        public TimeSpan Expiration => TimeSpan.FromMinutes(5);
-    }
+        : IQuery<GetProductsResult>;
 
     public record GetProductsResult(PaginateResult<Product> Products);
 
-    internal class GetProductsQueryHandler
+    public class GetProductsQueryHandler
         (IDocumentSession session, ILogger<GetProductsQueryHandler> logger)
         : IQueryHandler<GetProductsQuery, GetProductsResult>
     {
@@ -30,19 +25,24 @@ namespace Catalog.API.Models.Products.GetProducts
                 .LongCountAsync(cancellationToken);
 
             var products = await session.Query<Product>()
+                .OrderBy(product => product.Name)
                 .Skip((query.PageNumber - 1) * query.PageSize)
                 .Take(query.PageSize)
                 .ToListAsync(cancellationToken);
 
-            var paginateResult =
-                  new PaginateResult<Product>
-                  {
-                      PageNumber = query.PageNumber,
-                      PageSize = query.PageSize,
-                      TotalCount = totalCount,
-                      Data = products
-                 };
-            return new GetProductsResult(paginateResult);
+            return CreateResult(query, products, totalCount);
         }
+
+        public static GetProductsResult CreateResult(
+            GetProductsQuery query,
+            IEnumerable<Product> products,
+            long totalCount) =>
+            new(new PaginateResult<Product>
+            {
+                PageNumber = query.PageNumber,
+                PageSize = query.PageSize,
+                TotalCount = totalCount,
+                Data = products
+            });
     }
 }

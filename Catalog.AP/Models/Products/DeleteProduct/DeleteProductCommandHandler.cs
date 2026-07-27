@@ -5,7 +5,7 @@
 
     public record DeleteProductResult(bool IsSuccess);
 
-    internal class DeleteProductCommandHandler(IDocumentSession session,
+    public class DeleteProductCommandHandler(IDocumentSession session,
         ILogger<DeleteProductCommandHandler>logger) :
         ICommandHandler<DeleteProductCommand, DeleteProductResult>
 
@@ -16,7 +16,14 @@
             logger.LogInformation(
                 "DeleteProductCommandHandler.Handle llamado con {Command}",
                 command);
-            session.Delete<Product>(command.Id);
+            var product = await session.LoadAsync<Product>(command.Id, cancellationToken);
+
+            if (product is null)
+            {
+                throw new NotFoundException(nameof(Product), command.Id);
+            }
+
+            session.Delete(product);
             await session.SaveChangesAsync(cancellationToken);
             return new DeleteProductResult(true);
         }

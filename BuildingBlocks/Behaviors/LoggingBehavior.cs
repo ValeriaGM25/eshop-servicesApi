@@ -1,11 +1,6 @@
 ﻿using MediatR;
 using Microsoft.Extensions.Logging;
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace BuildingBlocks.Behaviors
 {
@@ -27,9 +22,9 @@ namespace BuildingBlocks.Behaviors
             var response = await next();
             timer.Stop();
             var timeTaken =  timer.Elapsed;
-            if (timeTaken.Seconds > 3)
+            if (timeTaken.TotalSeconds > 3)
                 logger.LogWarning("[Performance] La peticion {Request} toma {TimeTaken} segundos. ",
-                    typeof(TRequest).Name, timeTaken.Seconds);
+                    typeof(TRequest).Name, timeTaken.TotalSeconds);
             logger.LogInformation("[Final] Manejar {Request} with {Response}", typeof(TRequest).Name,
                 typeof(TResponse).Name);
             return response;

@@ -1,90 +1,20 @@
 services:
   catalogdb:
     image: postgres:15
-    container_name: catalogdb
-    environment:
-      POSTGRES_DB: CatalogDb
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    restart: always
-    ports:
-      - "5433:5432"
-    volumes:
-      - postgres_catalog:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d CatalogDb"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
 
   basketdb:
     image: postgres:15
-    container_name: basketdb
-    environment:
-      POSTGRES_DB: BasketDb
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    restart: always
-    ports:
-      - "5434:5432"
-    volumes:
-      - postgres_basket:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d BasketDb"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
 
   distributedcache:
     image: redis:7-alpine
-    container_name: distributedcache
-    restart: always
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
-  catalog.api:
-    image: catalog-api
-    container_name: catalog.api
-    build:
-      context: .
-      dockerfile: Catalog.AP/Dockerfile
-    environment:
-      ASPNETCORE_ENVIRONMENT: Development
-      ASPNETCORE_HTTP_PORTS: 8080
-      ConnectionStrings__Database: Server=catalogdb;Port=5432;Database=CatalogDb;User Id=postgres;Password=postgres;Include Error Detail=true
-    ports:
-      - "6000:8080"
-    depends_on:
-      catalogdb:
-        condition: service_healthy
-
-  basket.api:
-    image: basket-api
-    container_name: basket.api
-    build:
-      context: .
-      dockerfile: Basket/Basket/Dockerfile
-    environment:
-      ASPNETCORE_ENVIRONMENT: Development
-      ASPNETCORE_HTTP_PORTS: 8080
-      ConnectionStrings__Database: Server=basketdb;Port=5432;Database=BasketDb;User Id=postgres;Password=postgres;Include Error Detail=true
-      ConnectionStrings__Redis: distributedcache:6379
-    ports:
-      - "6001:8080"
-    depends_on:
-      basketdb:
-        condition: service_healthy
-      distributedcache:
-        condition: service_healthy
 
 volumes:
   postgres_catalog:
+    external: true
+    name: dockercompose11762921647425945260_postgres_catalog
   postgres_basket:
+    external: true
+    name: dockercompose11762921647425945260_postgres_basket
   redis_data:
+    external: true
+    name: dockercompose11762921647425945260_redis_data
