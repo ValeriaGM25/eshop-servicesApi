@@ -7,13 +7,14 @@ public static class IdentitySeeder
         using var scope = createScope ? services.CreateScope() : null;
         var serviceProvider = scope?.ServiceProvider ?? services;
         var logger = serviceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("IdentitySeeder");
+        var dbContext = serviceProvider.GetRequiredService<IdentityDbContext>();
         var roleManager = serviceProvider.GetRequiredService<RoleManager<ApplicationRole>>();
         var userManager = serviceProvider.GetRequiredService<UserManager<ApplicationUser>>();
         var configuration = serviceProvider.GetRequiredService<IConfiguration>();
         var environment = serviceProvider.GetRequiredService<IWebHostEnvironment>();
 
         await EnsureRolesAsync(roleManager, logger);
-        await SeedAdminAsync(userManager, configuration, environment, logger);
+        await SeedAdminAsync(userManager, dbContext, configuration, environment, logger);
     }
 
     public static async Task EnsureRolesAsync(
@@ -49,31 +50,29 @@ public static class IdentitySeeder
 
     public static async Task SeedAdminAsync(
         UserManager<ApplicationUser> userManager,
+        IdentityDbContext dbContext,
         IConfiguration configuration,
         IWebHostEnvironment environment,
         ILogger logger)
     {
-        var adminEmail = configuration["AUTH_ADMIN_EMAIL"]?.Trim().ToLowerInvariant();
-        var adminPassword = configuration["AUTH_ADMIN_PASSWORD"];
-        var adminFullName = configuration["AUTH_ADMIN_FULL_NAME"]?.Trim();
-        var forcePasswordReset = bool.TryParse(configuration["AUTH_ADMIN_FORCE_PASSWORD_RESET"], out var parsed) && parsed;
+        var adminOptions = AdminBootstrapOptions.FromConfiguration(configuration);
+        adminOptions.ValidateForProduction(environment);
 
-        if (string.IsNullOrWhiteSpace(adminEmail)
-            || string.IsNullOrWhiteSpace(adminPassword)
-            || string.IsNullOrWhiteSpace(adminFullName))
+        if (string.IsNullOrWhiteSpace(adminOptions.Email))
         {
             logger.LogInformation("Initial admin was not configured.");
             return;
         }
 
-        var admin = await userManager.FindByEmailAsync(adminEmail);
+        var admin = await userManager.FindByEmailAsync(adminOptions.Email);
         if (admin is null)
         {
+            var adminPassword = adminOptions.GetRequiredPasswordForCreate();
             admin = new ApplicationUser
             {
-                UserName = adminEmail,
-                Email = adminEmail,
-                FullName = adminFullName,
+                UserName = adminOptions.Email,
+                Email = adminOptions.Email,
+                FullName = adminOptions.FullName,
                 CreatedAtUtc = DateTime.UtcNow,
                 IsActive = true,
                 EmailConfirmed = true
@@ -92,63 +91,83 @@ public static class IdentitySeeder
             }
 
             logger.LogInformation("Initial admin user created.");
+            logger.LogInformation("Admin role assigned to initial admin user.");
+            return;
         }
-        else
+
+        if (!adminOptions.ForcePasswordReset)
         {
-            admin.UserName = adminEmail;
-            admin.Email = adminEmail;
-            admin.FullName = adminFullName;
-            admin.IsActive = true;
-
-            var updateResult = await userManager.UpdateAsync(admin);
-            if (!updateResult.Succeeded)
-            {
-                throw new InvalidOperationException($"Could not update initial admin user: {FormatErrors(updateResult)}");
-            }
-
-            var currentRoles = await userManager.GetRolesAsync(admin);
-            var rolesToRemove = currentRoles.Where(role => role != IdentityRoles.Admin).ToArray();
-            if (rolesToRemove.Length > 0)
-            {
-                var removeResult = await userManager.RemoveFromRolesAsync(admin, rolesToRemove);
-                if (!removeResult.Succeeded)
-                {
-                    throw new InvalidOperationException($"Could not remove unexpected admin roles: {FormatErrors(removeResult)}");
-                }
-            }
-
-            if (!currentRoles.Contains(IdentityRoles.Admin))
-            {
-                var addRoleResult = await userManager.AddToRoleAsync(admin, IdentityRoles.Admin);
-                if (!addRoleResult.Succeeded)
-                {
-                    throw new InvalidOperationException($"Could not assign Admin role to initial admin user: {FormatErrors(addRoleResult)}");
-                }
-            }
-
-            logger.LogInformation("Initial admin user already exists.");
+            logger.LogInformation("Initial admin user already exists. Password reset is disabled.");
+            return;
         }
 
-        if (!forcePasswordReset)
+        var resetPassword = adminOptions.GetRequiredPasswordForReset();
+        await EnsureAdminRoleAsync(userManager, admin);
+        await ResetAdminPasswordAsync(userManager, admin, resetPassword, logger);
+        await RevokeActiveRefreshTokensAsync(dbContext, admin.Id, logger);
+    }
+
+    private static async Task EnsureAdminRoleAsync(
+        UserManager<ApplicationUser> userManager,
+        ApplicationUser admin)
+    {
+        if (await userManager.IsInRoleAsync(admin, IdentityRoles.Admin))
         {
             return;
         }
 
+        var addRoleResult = await userManager.AddToRoleAsync(admin, IdentityRoles.Admin);
+        if (!addRoleResult.Succeeded)
+        {
+            throw new InvalidOperationException($"Could not assign Admin role to initial admin user: {FormatErrors(addRoleResult)}");
+        }
+    }
+
+    private static async Task ResetAdminPasswordAsync(
+        UserManager<ApplicationUser> userManager,
+        ApplicationUser admin,
+        string adminPassword,
+        ILogger logger)
+    {
         var resetToken = await userManager.GeneratePasswordResetTokenAsync(admin);
         var resetResult = await userManager.ResetPasswordAsync(admin, resetToken, adminPassword);
         if (!resetResult.Succeeded)
         {
-            var message = $"Could not reset initial admin password: {FormatErrors(resetResult)}";
-            logger.LogError("{Message}", message);
-            if (environment.IsDevelopment())
-            {
-                throw new InvalidOperationException(message);
-            }
-
-            return;
+            throw new InvalidOperationException($"Could not reset initial admin password: {FormatErrors(resetResult)}");
         }
 
-        logger.LogInformation("La contraseña del administrador local fue restablecida.");
+        var stampResult = await userManager.UpdateSecurityStampAsync(admin);
+        if (!stampResult.Succeeded)
+        {
+            throw new InvalidOperationException($"Could not update initial admin security stamp: {FormatErrors(stampResult)}");
+        }
+
+        logger.LogInformation("Initial admin password reset completed.");
+    }
+
+    private static async Task RevokeActiveRefreshTokensAsync(
+        IdentityDbContext dbContext,
+        string adminUserId,
+        ILogger logger)
+    {
+        var now = DateTime.UtcNow;
+        var activeTokens = await dbContext.RefreshTokens
+            .Where(token => token.UserId == adminUserId
+                && token.RevokedAtUtc == null
+                && token.ExpiresAtUtc > now)
+            .ToListAsync();
+
+        foreach (var token in activeTokens)
+        {
+            token.RevokedAtUtc = now;
+        }
+
+        if (activeTokens.Count > 0)
+        {
+            await dbContext.SaveChangesAsync();
+        }
+
+        logger.LogInformation("Existing admin refresh tokens revoked.");
     }
 
     private static string FormatErrors(IdentityResult result)

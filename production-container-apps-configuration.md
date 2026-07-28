@@ -20,6 +20,7 @@ Jwt__RefreshTokenDays=7
 AUTH_ADMIN_EMAIL=<configurable>
 AUTH_ADMIN_PASSWORD=secretref:admin-password
 AUTH_ADMIN_FULL_NAME=<configurable>
+AUTH_ADMIN_FORCE_PASSWORD_RESET=false
 Cors__AllowedOrigins__0=https://eshop-services.netlify.app
 ```
 
@@ -74,6 +75,58 @@ GET /health
 ```
 
 `/health/live` only indicates that ASP.NET Core is alive. `/health/ready` and `/health` depend on service readiness and configured dependencies.
+
+## Initial Administrator Password Reset
+
+The initial administrator is identified by `AUTH_ADMIN_EMAIL`. The password is read only from `AUTH_ADMIN_PASSWORD`, which should point to the `admin-password` Container App secret in production.
+
+First creation should use password reset disabled:
+
+```text
+AUTH_ADMIN_EMAIL=admin@gmail.com
+AUTH_ADMIN_PASSWORD=secretref:admin-password
+AUTH_ADMIN_FORCE_PASSWORD_RESET=false
+```
+
+Changing the secret value does not automatically update the stored ASP.NET Core Identity password hash. To rotate the initial administrator password in a controlled way:
+
+1. Update the `admin-password` secret.
+2. Set `AUTH_ADMIN_FORCE_PASSWORD_RESET=true`.
+3. Create a new revision or restart the revision.
+4. Wait for the log `Initial admin password reset completed.`
+5. Test login with the new password.
+6. Set `AUTH_ADMIN_FORCE_PASSWORD_RESET=false` again.
+7. Create a new revision.
+
+When the password reset completes, existing refresh tokens for the administrator are revoked. Existing access tokens can remain valid until they expire because the current API does not perform server-side JWT revocation.
+
+Suggested commands only. Do not put a real password in documentation or source control.
+
+```powershell
+az containerapp secret set `
+  --name eshop-identity-api `
+  --resource-group rg-eshop-production `
+  --secrets "admin-password=<VALOR-SEGURO>"
+```
+
+```powershell
+az containerapp update `
+  --name eshop-identity-api `
+  --resource-group rg-eshop-production `
+  --set-env-vars `
+    "AUTH_ADMIN_PASSWORD=secretref:admin-password" `
+    "AUTH_ADMIN_FORCE_PASSWORD_RESET=true"
+```
+
+After the reset is confirmed:
+
+```powershell
+az containerapp update `
+  --name eshop-identity-api `
+  --resource-group rg-eshop-production `
+  --set-env-vars `
+    "AUTH_ADMIN_FORCE_PASSWORD_RESET=false"
+```
 
 ## Suggested Image Commands
 
