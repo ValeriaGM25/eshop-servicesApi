@@ -1,3 +1,4 @@
+name: eshop-services
 services:
   catalogdb:
     image: postgres:15
