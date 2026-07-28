@@ -4,13 +4,13 @@ public class StoreBasketCommandValidator : AbstractValidator<StoreBasketCommand>
 {
     public StoreBasketCommandValidator()
     {
+        RuleFor(command => command.UserId)
+            .NotEmpty();
+
         RuleFor(command => command.Cart)
             .NotNull()
             .DependentRules(() =>
             {
-                RuleFor(command => command.Cart.UserName)
-                    .NotEmpty();
-
                 RuleFor(command => command.Cart.Items)
                     .NotNull();
 

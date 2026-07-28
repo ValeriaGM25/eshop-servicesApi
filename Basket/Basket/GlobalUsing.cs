@@ -8,3 +8,4 @@ global using FluentValidation;
 global using Marten;
 global using MediatR;
 global using StackExchange.Redis;
+global using System.Security.Claims;

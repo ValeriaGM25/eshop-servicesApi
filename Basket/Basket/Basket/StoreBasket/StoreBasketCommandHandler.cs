@@ -7,6 +7,7 @@ public class StoreBasketCommandHandler(IBasketRepository basketRepository)
         StoreBasketCommand command,
         CancellationToken cancellationToken)
     {
+        command.Cart.UserName = command.UserId;
         var basket = await basketRepository.StoreBasket(command.Cart, cancellationToken);
 
         return new StoreBasketResult(basket);
