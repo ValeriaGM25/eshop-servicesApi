@@ -20,7 +20,7 @@ Jwt__RefreshTokenDays=7
 AUTH_ADMIN_EMAIL=<configurable>
 AUTH_ADMIN_PASSWORD=secretref:admin-password
 AUTH_ADMIN_FULL_NAME=<configurable>
-Cors__AllowedOrigins__0=https://DOMINIO-NETLIFY
+Cors__AllowedOrigins__0=https://eshop-services.netlify.app
 ```
 
 Optional temporary legacy JWT fallbacks are still accepted during transition:
@@ -42,7 +42,7 @@ ConnectionStrings__Database=secretref:catalog-db
 Jwt__Issuer=eshop-identity-production
 Jwt__Audience=eshop-apis-production
 Jwt__Key=secretref:jwt-key
-Cors__AllowedOrigins__0=https://DOMINIO-NETLIFY
+Cors__AllowedOrigins__0=https://eshop-services.netlify.app
 DatabaseInitialization__SeedDemoData=false
 ```
 
@@ -58,7 +58,7 @@ ConnectionStrings__Redis=eshop-redis:6379,abortConnect=false
 Jwt__Issuer=eshop-identity-production
 Jwt__Audience=eshop-apis-production
 Jwt__Key=secretref:jwt-key
-Cors__AllowedOrigins__0=https://DOMINIO-NETLIFY
+Cors__AllowedOrigins__0=https://eshop-services.netlify.app
 ```
 
 Redis is expected to be reachable inside Azure Container Apps at `eshop-redis:6379`. The application also enforces resilient Redis client options at startup.
@@ -77,20 +77,56 @@ GET /health
 
 ## Suggested Image Commands
 
-These commands build local v2 images only. They do not push to ACR.
+These commands build local v3 images only. They do not push to ACR.
 
 ```powershell
-docker build -f "Identity/Identity.API/Dockerfile" -t identity-api:v2 .
-docker build -f "Catalog.AP/Dockerfile" -t catalog-api:v2 .
-docker build -f "Basket/Basket/Dockerfile" -t basket-api:v2 .
+docker build --platform linux/amd64 -f "Identity/Identity.API/Dockerfile" -t identity-api:v3 .
+docker build --platform linux/amd64 -f "Catalog.AP/Dockerfile" -t catalog-api:v3 .
+docker build --platform linux/amd64 -f "Basket/Basket/Dockerfile" -t basket-api:v3 .
 ```
 
 Tag for ACR only when ready to deploy:
 
 ```powershell
-docker tag identity-api:v2 eshopvaleria2026acr.azurecr.io/identity-api:v2
-docker tag catalog-api:v2 eshopvaleria2026acr.azurecr.io/catalog-api:v2
-docker tag basket-api:v2 eshopvaleria2026acr.azurecr.io/basket-api:v2
+docker tag identity-api:v3 eshopvaleria2026acr.azurecr.io/identity-api:v3
+docker tag catalog-api:v3 eshopvaleria2026acr.azurecr.io/catalog-api:v3
+docker tag basket-api:v3 eshopvaleria2026acr.azurecr.io/basket-api:v3
 ```
 
-Do not run `docker push` until deployment is explicitly approved.
+Push only when deployment is explicitly approved:
+
+```powershell
+docker push eshopvaleria2026acr.azurecr.io/identity-api:v3
+docker push eshopvaleria2026acr.azurecr.io/catalog-api:v3
+docker push eshopvaleria2026acr.azurecr.io/basket-api:v3
+```
+
+## Suggested Container App Updates
+
+Updating environment variables creates a new Azure Container Apps revision. These commands are examples and should be run only during an approved deployment.
+
+```powershell
+az containerapp update `
+  --name eshop-identity-api `
+  --resource-group rg-eshop-production `
+  --set-env-vars `
+    "Cors__AllowedOrigins__0=https://eshop-services.netlify.app"
+```
+
+```powershell
+az containerapp update `
+  --name eshop-catalog-api `
+  --resource-group rg-eshop-production `
+  --set-env-vars `
+    "Cors__AllowedOrigins__0=https://eshop-services.netlify.app"
+```
+
+```powershell
+az containerapp update `
+  --name eshop-basket-api `
+  --resource-group rg-eshop-production `
+  --set-env-vars `
+    "Cors__AllowedOrigins__0=https://eshop-services.netlify.app"
+```
+
+If the CORS code changes are not already deployed, update each Container App image to the new image tag after building and pushing the approved images.

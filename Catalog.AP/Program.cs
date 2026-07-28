@@ -24,11 +24,11 @@ builder.Services.AddValidatorsFromAssembly(typeof(Program).Assembly);
 
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("ReactApp", policy =>
+    options.AddPolicy("FrontendCors", policy =>
     {
         policy
             .WithOrigins(corsOrigins)
-            .WithHeaders("Authorization", "Content-Type")
+            .AllowAnyHeader()
             .AllowAnyMethod();
     });
 });
@@ -70,7 +70,7 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
 });
 
-app.UseCors("ReactApp");
+app.UseCors("FrontendCors");
 
 app.UseAuthentication();
 app.UseAuthorization();

@@ -74,7 +74,7 @@ builder.Services.AddAuthorization();
 
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("ReactApp", policy =>
+    options.AddPolicy("FrontendCors", policy =>
     {
         policy
             .WithOrigins(corsOrigins)
@@ -123,10 +123,16 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
 });
-app.UseCors("ReactApp");
+app.UseCors("FrontendCors");
 app.UseRateLimiter();
 app.Use(async (context, next) =>
 {
+    if (HttpMethods.IsOptions(context.Request.Method))
+    {
+        await next(context);
+        return;
+    }
+
     var readinessState = context.RequestServices.GetRequiredService<ReadinessState>();
     if (!readinessState.IsReady && context.Request.Path.StartsWithSegments("/auth"))
     {
