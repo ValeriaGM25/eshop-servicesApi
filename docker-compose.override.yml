@@ -43,6 +43,22 @@ services:
       timeout: 5s
       retries: 10
 
+  identitydb:
+    environment:
+      POSTGRES_DB: IdentityDb
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    restart: always
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_identity:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d IdentityDb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   catalog.api:
     image: catalog-api
     build:
@@ -52,6 +68,9 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_HTTP_PORTS: 8080
       ConnectionStrings__Database: "Server=catalogdb;Port=5432;Database=CatalogDb;User Id=postgres;Password=postgres;Include Error Detail=true"
+      Jwt__Issuer: ${JWT_ISSUER:-eshop.identity}
+      Jwt__Audience: ${JWT_AUDIENCE:-eshop.apis}
+      Jwt__Key: ${JWT_KEY}
     ports:
       - "6002:8080"
     depends_on:
@@ -68,10 +87,37 @@ services:
       ASPNETCORE_HTTP_PORTS: 8080
       ConnectionStrings__Database: "Server=basketdb;Port=5432;Database=BasketDb;User Id=postgres;Password=postgres;Include Error Detail=true"
       ConnectionStrings__Redis: "distributedcache:6379"
+      Jwt__Issuer: ${JWT_ISSUER:-eshop.identity}
+      Jwt__Audience: ${JWT_AUDIENCE:-eshop.apis}
+      Jwt__Key: ${JWT_KEY}
     ports:
       - "6001:8080"
     depends_on:
       basketdb:
         condition: service_healthy
       distributedcache:
+        condition: service_healthy
+
+  identity.api:
+    image: identity-api
+    build:
+      context: .
+      dockerfile: Identity/Identity.API/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_HTTP_PORTS: 8080
+      ConnectionStrings__IdentityDatabase: "Server=identitydb;Port=5432;Database=IdentityDb;User Id=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres};Include Error Detail=true"
+      Jwt__Issuer: ${JWT_ISSUER:-eshop.identity}
+      Jwt__Audience: ${JWT_AUDIENCE:-eshop.apis}
+      Jwt__Key: ${JWT_KEY}
+      JWT_ACCESS_TOKEN_MINUTES: ${JWT_ACCESS_TOKEN_MINUTES:-15}
+      JWT_REFRESH_TOKEN_DAYS: ${JWT_REFRESH_TOKEN_DAYS:-7}
+      AUTH_ADMIN_EMAIL: ${AUTH_ADMIN_EMAIL}
+      AUTH_ADMIN_PASSWORD: ${AUTH_ADMIN_PASSWORD}
+      AUTH_ADMIN_FULL_NAME: ${AUTH_ADMIN_FULL_NAME}
+      AUTH_ADMIN_FORCE_PASSWORD_RESET: ${AUTH_ADMIN_FORCE_PASSWORD_RESET}
+    ports:
+      - "6003:8080"
+    depends_on:
+      identitydb:
         condition: service_healthy

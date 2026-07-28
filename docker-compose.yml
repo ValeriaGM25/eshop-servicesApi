@@ -8,6 +8,9 @@ services:
   distributedcache:
     image: redis:7-alpine
 
+  identitydb:
+    image: postgres:15
+
 volumes:
   postgres_catalog:
     external: true
@@ -18,3 +21,5 @@ volumes:
   redis_data:
     external: true
     name: dockercompose11762921647425945260_redis_data
+  postgres_identity:
+    name: eshop_postgres_identity
