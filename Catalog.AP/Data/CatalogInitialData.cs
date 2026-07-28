@@ -2,19 +2,29 @@ namespace Catalog.API.Data
 {
     public static class CatalogInitialData
     {
-        public static async Task SeedAsync(IServiceProvider services)
+        public static bool ShouldSeedDemoData(IConfiguration configuration, IWebHostEnvironment environment)
         {
-            using var scope = services.CreateScope();
-            var session = scope.ServiceProvider.GetRequiredService<IDocumentSession>();
-
-            var productCount = await session.Query<Product>().LongCountAsync();
-            if (productCount > 0)
+            var configuredValue = configuration["DatabaseInitialization:SeedDemoData"];
+            if (bool.TryParse(configuredValue, out var seedDemoData))
             {
-                await NormalizeDemoProductNamesAsync(session);
-                return;
+                return seedDemoData;
             }
 
-            foreach (var product in GetProducts())
+            return environment.IsDevelopment();
+        }
+
+        public static async Task SeedAsync(IServiceProvider services, bool createScope = true)
+        {
+            using var scope = createScope ? services.CreateScope() : null;
+            var serviceProvider = scope?.ServiceProvider ?? services;
+            var session = serviceProvider.GetRequiredService<IDocumentSession>();
+
+            await NormalizeDemoProductNamesAsync(session);
+            var existingNames = (await session.Query<Product>().ToListAsync())
+                .Select(product => product.Name)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var product in GetDemoProducts().Where(product => !existingNames.Contains(product.Name)))
             {
                 session.Store(product);
             }
@@ -50,7 +60,7 @@ namespace Catalog.API.Data
             await session.SaveChangesAsync();
         }
 
-        private static IEnumerable<Product> GetProducts() =>
+        public static IEnumerable<Product> GetDemoProducts() =>
         [
             new Product
             {

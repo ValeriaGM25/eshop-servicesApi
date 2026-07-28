@@ -2,19 +2,15 @@ namespace Identity.API.Services;
 
 public static class IdentitySeeder
 {
-    public static async Task SeedAsync(IServiceProvider services)
+    public static async Task SeedAsync(IServiceProvider services, bool createScope = true)
     {
-        using var scope = services.CreateScope();
-        var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("IdentitySeeder");
-        var dbContext = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
-        var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<ApplicationRole>>();
-        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-        var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
-        var environment = scope.ServiceProvider.GetRequiredService<IWebHostEnvironment>();
-
-        var pendingMigrations = (await dbContext.Database.GetPendingMigrationsAsync()).ToArray();
-        await dbContext.Database.MigrateAsync();
-        logger.LogInformation("Identity migrations applied: {MigrationCount}", pendingMigrations.Length);
+        using var scope = createScope ? services.CreateScope() : null;
+        var serviceProvider = scope?.ServiceProvider ?? services;
+        var logger = serviceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("IdentitySeeder");
+        var roleManager = serviceProvider.GetRequiredService<RoleManager<ApplicationRole>>();
+        var userManager = serviceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var configuration = serviceProvider.GetRequiredService<IConfiguration>();
+        var environment = serviceProvider.GetRequiredService<IWebHostEnvironment>();
 
         await EnsureRolesAsync(roleManager, logger);
         await SeedAdminAsync(userManager, configuration, environment, logger);

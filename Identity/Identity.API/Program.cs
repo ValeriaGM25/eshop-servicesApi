@@ -1,11 +1,17 @@
 using Identity.API.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.IdentityModel.Tokens;
-using System.Text;
 using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
+var identityConnectionString = builder.Configuration.GetRequiredConnectionString("IdentityDatabase");
+var jwtConfiguration = builder.Configuration.GetRequiredJwtConfiguration();
+var corsOrigins = builder.Configuration.GetRequiredCorsOrigins(builder.Environment);
+
+builder.Services.AddSingleton<ReadinessState>();
+builder.Services.AddHostedService<IdentityDatabaseInitializationHostedService>();
 
 builder.Services.AddCarter();
 
@@ -20,25 +26,21 @@ builder.Services.AddValidatorsFromAssembly(typeof(Program).Assembly);
 
 builder.Services.Configure<JwtOptions>(options =>
 {
-    options.Issuer = builder.Configuration["JWT_ISSUER"]
-        ?? builder.Configuration["Jwt:Issuer"]
-        ?? throw new InvalidOperationException("JWT issuer is not configured.");
-    options.Audience = builder.Configuration["JWT_AUDIENCE"]
-        ?? builder.Configuration["Jwt:Audience"]
-        ?? throw new InvalidOperationException("JWT audience is not configured.");
-    options.Key = builder.Configuration["JWT_KEY"]
-        ?? builder.Configuration["Jwt:Key"]
-        ?? throw new InvalidOperationException("JWT key is not configured.");
-    options.AccessTokenMinutes = ReadInt(builder.Configuration, "JWT_ACCESS_TOKEN_MINUTES", "Jwt:AccessTokenMinutes", 15);
-    options.RefreshTokenDays = ReadInt(builder.Configuration, "JWT_REFRESH_TOKEN_DAYS", "Jwt:RefreshTokenDays", 7);
+    options.Issuer = jwtConfiguration.Issuer;
+    options.Audience = jwtConfiguration.Audience;
+    options.Key = jwtConfiguration.Key;
+    options.AccessTokenMinutes = jwtConfiguration.AccessTokenMinutes;
+    options.RefreshTokenDays = jwtConfiguration.RefreshTokenDays;
 });
 
-var jwtIssuer = builder.Configuration["JWT_ISSUER"] ?? builder.Configuration["Jwt:Issuer"];
-var jwtAudience = builder.Configuration["JWT_AUDIENCE"] ?? builder.Configuration["Jwt:Audience"];
-var jwtKey = builder.Configuration["JWT_KEY"] ?? builder.Configuration["Jwt:Key"];
-
 builder.Services.AddDbContext<IdentityDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("IdentityDatabase")));
+    options.UseNpgsql(identityConnectionString, npgsqlOptions =>
+    {
+        npgsqlOptions.EnableRetryOnFailure(
+            maxRetryCount: 5,
+            maxRetryDelay: TimeSpan.FromSeconds(10),
+            errorCodesToAdd: null);
+    }));
 
 builder.Services
     .AddIdentity<ApplicationUser, ApplicationRole>(options =>
@@ -65,7 +67,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
         options.MapInboundClaims = false;
-        options.TokenValidationParameters = CreateTokenValidationParameters(jwtIssuer, jwtAudience, jwtKey);
+        options.TokenValidationParameters = jwtConfiguration.CreateTokenValidationParameters();
     });
 
 builder.Services.AddAuthorization();
@@ -75,9 +77,7 @@ builder.Services.AddCors(options =>
     options.AddPolicy("ReactApp", policy =>
     {
         policy
-            .WithOrigins(
-                "http://localhost:5173",
-                "http://localhost:8088")
+            .WithOrigins(corsOrigins)
             .AllowAnyHeader()
             .AllowAnyMethod()
             .AllowCredentials();
@@ -111,50 +111,48 @@ builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 
 builder.Services.AddHealthChecks()
-    .AddNpgSql(builder.Configuration.GetConnectionString("IdentityDatabase")!);
+    .AddCheck<ReadinessHealthCheck>("identity-readiness", tags: ["ready"])
+    .AddNpgSql(identityConnectionString, name: "identity-postgresql", tags: ["ready"]);
 
 var app = builder.Build();
 
-await IdentitySeeder.SeedAsync(app.Services);
+app.Logger.LogInformation("Starting Identity API service.");
 
 app.UseExceptionHandler();
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+});
 app.UseCors("ReactApp");
 app.UseRateLimiter();
+app.Use(async (context, next) =>
+{
+    var readinessState = context.RequestServices.GetRequiredService<ReadinessState>();
+    if (!readinessState.IsReady && context.Request.Path.StartsWithSegments("/auth"))
+    {
+        context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+        await context.Response.WriteAsync("Application is live but not ready.");
+        return;
+    }
+
+    await next(context);
+});
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapCarter();
 app.MapOpenApi();
-app.MapHealthChecks("/health");
+app.MapHealthChecks("/health/live", new HealthCheckOptions
+{
+    Predicate = registration => registration.Tags.Contains("live")
+});
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = registration => registration.Tags.Contains("ready")
+});
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    Predicate = registration => registration.Tags.Contains("ready")
+});
 
 app.Run();
-
-static int ReadInt(IConfiguration configuration, string envKey, string configKey, int defaultValue)
-{
-    var value = configuration[envKey] ?? configuration[configKey];
-    return int.TryParse(value, out var parsed) ? parsed : defaultValue;
-}
-
-static TokenValidationParameters CreateTokenValidationParameters(string? issuer, string? audience, string? key)
-{
-    if (string.IsNullOrWhiteSpace(issuer)
-        || string.IsNullOrWhiteSpace(audience)
-        || string.IsNullOrWhiteSpace(key))
-    {
-        throw new InvalidOperationException("JWT configuration is incomplete.");
-    }
-
-    return new TokenValidationParameters
-    {
-        ValidateIssuerSigningKey = true,
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key)),
-        ValidateIssuer = true,
-        ValidIssuer = issuer,
-        ValidateAudience = true,
-        ValidAudience = audience,
-        ValidateLifetime = true,
-        ClockSkew = TimeSpan.FromMinutes(1),
-        NameClaimType = ClaimTypes.NameIdentifier,
-        RoleClaimType = ClaimTypes.Role
-    };
-}

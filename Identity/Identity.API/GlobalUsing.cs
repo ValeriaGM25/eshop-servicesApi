@@ -1,7 +1,9 @@
 global using BuildingBlocks;
 global using BuildingBlocks.Behaviors;
+global using BuildingBlocks.Configuration;
 global using BuildingBlocks.CQRS;
 global using BuildingBlocks.Exceptions.Handler;
+global using BuildingBlocks.Health;
 global using Carter;
 global using FluentValidation;
 global using Identity.API.Data;

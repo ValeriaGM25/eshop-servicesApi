@@ -75,26 +75,27 @@ public class TokenService(
         context.Response.Cookies.Append(
             RefreshTokenCookieName,
             refreshToken,
-            new CookieOptions
-            {
-                HttpOnly = true,
-                Secure = !environment.IsDevelopment(),
-                SameSite = SameSiteMode.Lax,
-                Path = "/auth",
-                Expires = expiresAtUtc
-            });
+            CreateRefreshTokenCookieOptions(environment, expiresAtUtc));
     }
 
     public void DeleteRefreshTokenCookie(HttpContext context)
     {
         context.Response.Cookies.Delete(
             RefreshTokenCookieName,
-            new CookieOptions
-            {
-                HttpOnly = true,
-                Secure = !environment.IsDevelopment(),
-                SameSite = SameSiteMode.Lax,
-                Path = "/auth"
-            });
+            CreateRefreshTokenCookieOptions(environment));
+    }
+
+    public static CookieOptions CreateRefreshTokenCookieOptions(
+        IWebHostEnvironment environment,
+        DateTimeOffset? expiresAtUtc = null)
+    {
+        return new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = !environment.IsDevelopment(),
+            SameSite = environment.IsDevelopment() ? SameSiteMode.Lax : SameSiteMode.None,
+            Path = "/auth",
+            Expires = expiresAtUtc
+        };
     }
 }
