@@ -1,0 +1,13 @@
+global using BuildingBlocks;
+global using BuildingBlocks.Behaviors;
+global using BuildingBlocks.CQRS;
+global using BuildingBlocks.Exceptions.Handler;
+global using Carter;
+global using FluentValidation;
+global using Identity.API.Data;
+global using Identity.API.Models;
+global using Identity.API.Services;
+global using MediatR;
+global using Microsoft.AspNetCore.Identity;
+global using Microsoft.EntityFrameworkCore;
+global using System.Security.Claims;
