@@ -127,3 +127,31 @@ services:
     depends_on:
       identitydb:
         condition: service_healthy
+
+  orders.api:
+    image: orders-api
+    build:
+      context: .
+      dockerfile: Orders/Orders.API/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_HTTP_PORTS: 8080
+      MongoDb__ConnectionString: ${MONGODB_CONNECTION_STRING}
+      MongoDb__DatabaseName: ${MONGODB_DATABASE_NAME:-EshopOrders}
+      MongoDb__OrdersCollection: ${MONGODB_ORDERS_COLLECTION:-orders}
+      Orders__TaxRate: ${ORDERS_TAX_RATE:-0.18}
+      Jwt__Issuer: ${JWT_ISSUER:-eshop.identity}
+      Jwt__Audience: ${JWT_AUDIENCE:-eshop.apis}
+      Jwt__Key: ${JWT_KEY}
+      BasketApi__BaseAddress: http://basket.api:8080
+      CatalogApi__BaseAddress: http://catalog.api:8080
+      Cors__AllowedOrigins__0: http://localhost:5173
+      Cors__AllowedOrigins__1: http://localhost:8088
+      Cors__AllowedOrigins__2: ${NETLIFY_ORIGIN:-http://localhost:5173}
+    ports:
+      - "6004:8080"
+    depends_on:
+      basket.api:
+        condition: service_started
+      catalog.api:
+        condition: service_started
