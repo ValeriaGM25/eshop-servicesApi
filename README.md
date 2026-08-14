@@ -59,6 +59,23 @@ NETLIFY_ORIGIN=https://your-site.netlify.app
 
 No guardar connection strings reales, contraseñas o secretos en `appsettings.json`, Dockerfile, Docker Compose, README o Git.
 
+Valores esperados para `Orders.API` en Azure Container Apps:
+
+```bash
+ASPNETCORE_ENVIRONMENT=Production
+ASPNETCORE_HTTP_PORTS=8080
+MongoDb__ConnectionString=secretref:mongodb-connection
+MongoDb__DatabaseName=EshopOrders
+MongoDb__OrdersCollection=orders
+Orders__TaxRate=0.18
+Jwt__Issuer=eshop-identity-production
+Jwt__Audience=eshop-apis-production
+Jwt__Key=secretref:jwt-key
+BasketApi__BaseAddress=http://eshop-basket-api
+CatalogApi__BaseAddress=http://eshop-catalog-api
+Cors__AllowedOrigins__0=https://eshop-services.netlify.app
+```
+
 ## Impuestos Y Totales
 
 `Orders.API` calcula en backend:
@@ -137,6 +154,7 @@ Respuesta paginada con registros resumidos:
     {
       "id": "string",
       "customerId": "string",
+      "customerName": "Valeria Galindo Marin",
       "createdAt": "2026-08-13T00:00:00Z",
       "status": "Pending",
       "itemsCount": 2,
@@ -152,7 +170,7 @@ Respuesta paginada con registros resumidos:
 }
 ```
 
-No devuelve email ni nombre del cliente porque esos datos no existen en `Order`.
+Devuelve `customerName` como snapshot histórico persistido en `Order`. Órdenes antiguas sin ese campo muestran `No disponible`.
 
 ### GET `/api/orders/customer/{customerId}`
 
@@ -276,7 +294,9 @@ Cobertura agregada para Orders:
 - filtro `Pending`;
 - MongoDB no disponible genera error controlado sin secretos;
 - reporte PDF existente genera bytes `application/pdf`;
-- reporte de orden inexistente devuelve flujo 404 mediante query.
+- reporte de orden inexistente devuelve flujo 404 mediante query;
+- `CustomerName` se persiste desde el JWT y no desde el body del frontend;
+- órdenes antiguas sin `CustomerName` siguen generando PDF.
 
 ## Ejemplos Manuales
 
@@ -329,5 +349,7 @@ Configurar secretos en el proveedor de hosting, no en Git:
 - JWT issuer/audience/key.
 - Basket/Catalog base addresses públicos o privados según despliegue.
 - CORS para Netlify vía variable.
+
+Ver `production-container-apps-configuration.md` para los comandos sugeridos de build, tag y despliegue manual en Azure Container Apps. No ejecutar `docker push` ni comandos `az containerapp` sin aprobación explícita.
 
 No hacer `git push` ni deploy automáticamente desde esta preparación.

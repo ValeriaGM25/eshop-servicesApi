@@ -1,13 +1,16 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
-using Microsoft.Extensions.Options;
 using MongoDB.Driver;
 using QuestPDF.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 var jwtConfiguration = builder.Configuration.GetRequiredJwtConfiguration();
 var corsOrigins = builder.Configuration.GetRequiredCorsOrigins(builder.Environment);
+var mongoDbOptions = builder.Configuration.GetRequiredMongoDbOptions();
+builder.Configuration.GetRequiredOrdersOptions();
+var basketApiOptions = builder.Configuration.GetRequiredHttpClientOptions("BasketApi");
+var catalogApiOptions = builder.Configuration.GetRequiredHttpClientOptions("CatalogApi");
 
 QuestPDF.Settings.License = LicenseType.Community;
 
@@ -20,25 +23,17 @@ builder.Services.AddSingleton<ReadinessState>();
 builder.Services.AddHostedService<OrdersMongoInitializationHostedService>();
 builder.Services.AddSingleton<IMongoClient>(sp =>
 {
-    var options = sp.GetRequiredService<IOptions<MongoDbOptions>>().Value;
-    if (string.IsNullOrWhiteSpace(options.ConnectionString))
-    {
-        throw new InvalidOperationException("MongoDB configuration is incomplete: MongoDb:ConnectionString is missing.");
-    }
-
-    return new MongoClient(options.ConnectionString);
+    return new MongoClient(mongoDbOptions.ConnectionString);
 });
 builder.Services.AddScoped<IOrdersRepository, MongoOrdersRepository>();
 builder.Services.AddScoped<IOrderReportService, QuestPdfOrderReportService>();
 builder.Services.AddHttpClient<IBasketClient, BasketClient>((sp, client) =>
 {
-    var options = sp.GetRequiredService<IOptionsMonitor<HttpClientOptions>>().Get("BasketApi");
-    client.BaseAddress = new Uri(options.BaseAddress.TrimEnd('/') + "/");
+    client.BaseAddress = new Uri(basketApiOptions.BaseAddress);
 });
 builder.Services.AddHttpClient<ICatalogClient, CatalogClient>((sp, client) =>
 {
-    var options = sp.GetRequiredService<IOptionsMonitor<HttpClientOptions>>().Get("CatalogApi");
-    client.BaseAddress = new Uri(options.BaseAddress.TrimEnd('/') + "/");
+    client.BaseAddress = new Uri(catalogApiOptions.BaseAddress);
 });
 
 builder.Services.AddCarter();
